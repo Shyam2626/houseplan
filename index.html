@@ -28,6 +28,7 @@ body{margin:0; height:100%; background:var(--scene); color:var(--ink); font:400 
 .title{padding:10px 14px 11px}
 h1{font-family:"Barlow Condensed","Arial Narrow",sans-serif; font-weight:600; font-size:1.7rem; line-height:1; margin:0}
 .sub{color:var(--ink-soft); font-size:13.5px; margin:4px 0 6px}
+.toggles{display:flex; flex-wrap:wrap; gap:4px 14px}
 .toggle{display:flex; align-items:center; gap:8px; font-size:14px; font-weight:500}
 .toggle input{accent-color:var(--accent); width:16px; height:16px; margin:0}
 .modes{display:flex; padding:3px; gap:2px}
@@ -39,9 +40,13 @@ select{font:inherit; font-weight:600; color:var(--ink); background:var(--panel);
 .map{position:fixed; right:12px; bottom:calc(12px + env(safe-area-inset-bottom,0px)); width:190px; padding:6px; line-height:0}
 .map canvas{width:100%; height:auto; cursor:crosshair; display:block}
 .map .cap{line-height:1.3; font-size:12.5px; color:var(--ink-soft); padding:6px 2px 1px}
-.pad{position:fixed; right:214px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); display:none; flex-direction:column; gap:10px}
-.pad button{width:56px; height:56px; border-radius:50%; border:1px solid var(--rule); background:var(--panel); color:var(--ink); font-size:20px; touch-action:none; user-select:none; -webkit-user-select:none}
-@media (pointer:coarse){ body.walk .pad{display:flex} }
+.pad{position:fixed; right:214px; bottom:calc(14px + env(safe-area-inset-bottom,0px)); display:none; grid-template-columns:repeat(3,54px); grid-template-rows:repeat(2,54px); gap:6px}
+body.walk .pad{display:grid}
+body.walk .help{max-width:min(430px, calc(100% - 430px))}
+#padF{grid-column:2; grid-row:1} #padL{grid-column:1; grid-row:2} #padB{grid-column:2; grid-row:2} #padR{grid-column:3; grid-row:2}
+.pad button{width:54px; height:54px; border-radius:10px; border:1px solid var(--rule); background:var(--panel); color:var(--ink); font-size:20px; cursor:pointer; touch-action:none; user-select:none; -webkit-user-select:none; box-shadow:0 2px 6px rgba(0,0,0,.18)}
+.pad button:active{background:var(--ink); color:var(--panel)}
+
 @media (max-width:700px){
   .map{width:118px} .map .cap{display:none}
   .pad{right:140px}
@@ -58,8 +63,10 @@ select{font:inherit; font-weight:600; color:var(--ink); background:var(--panel);
 <div class="top">
   <div class="card title">
     <h1>Ground floor, 1,066 sq ft</h1>
-    <p class="sub">Modelled from your plan, roof lifted off so you can see in.</p>
-    <label class="toggle"><input type="checkbox" id="labels" checked> Room names</label>
+    <p class="sub">Your plan with the front design you shared, mirrored so the tower sits over the stairs.</p>
+    <div class="toggles"><label class="toggle"><input type="checkbox" id="evening" checked> Evening lights</label>
+    <label class="toggle"><input type="checkbox" id="roof" checked> Roof &amp; terrace</label>
+    <label class="toggle"><input type="checkbox" id="labels"> Room names</label></div>
   </div>
   <div class="card modes" role="group" aria-label="View">
     <button type="button" id="mOrbit" aria-pressed="true">Overview</button>
@@ -76,7 +83,7 @@ select{font:inherit; font-weight:600; color:var(--ink); background:var(--panel);
   <canvas id="map" aria-label="Your floor plan. Click a spot to stand there."></canvas>
   <div class="cap">Click the plan to stand there</div>
 </div>
-<div class="pad" aria-hidden="true"><button type="button" id="padF">▲</button><button type="button" id="padB">▼</button></div>
+<div class="pad"><button type="button" id="padF" aria-label="Move forward">▲</button><button type="button" id="padL" aria-label="Turn left">◀</button><button type="button" id="padB" aria-label="Move backward">▼</button><button type="button" id="padR" aria-label="Turn right">▶</button></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
@@ -98,16 +105,16 @@ catch(e){ document.body.insertAdjacentHTML('beforeend','<div class="fail"><p>The
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 $('stage').appendChild(renderer.domElement);
-const scene=new THREE.Scene();
+const scene=new THREE.Scene(); let PARENT=scene;
 const camera=new THREE.PerspectiveCamera(48,1,0.2,1500);
 camera.rotation.order='YXZ';
 const controls=new THREE.OrbitControls(camera,renderer.domElement);
 controls.enableDamping=true; controls.maxPolarAngle=Math.PI*0.47; controls.minDistance=8; controls.maxDistance=220;
 
-scene.add(new THREE.HemisphereLight(0xffffff,0x9a917c,0.78));
+const hemi=new THREE.HemisphereLight(0xffffff,0x9a917c,0.78); scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xfff1dc,0.62);
 sun.position.set(-30,70,15); sun.target.position.set(5,0,25);
-sun.castShadow=true; sun.shadow.mapSize.set(4096,4096); sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.05;
+sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.05;
 Object.assign(sun.shadow.camera,{left:-70,right:70,top:70,bottom:-70,near:1,far:220});
 scene.add(sun); scene.add(sun.target);
 
@@ -179,11 +186,11 @@ function box(x0,y0,x1,y1,b,t,mat,o={}){
   const m=new THREE.Mesh(unitBox,mat);
   const X0=fx(x0),X1=fx(x1),Z0=fz(y0),Z1=fz(y1);
   m.scale.set(Math.max(0.02,X1-X0),t-b,Math.max(0.02,Z1-Z0)); m.position.set((X0+X1)/2,(b+t)/2,(Z0+Z1)/2);
-  m.castShadow=o.cast!==false; m.receiveShadow=true; scene.add(m);
+  m.castShadow=o.cast!==false; m.receiveShadow=true; PARENT.add(m);
   if(o.block) blockers.push([Math.min(X0,X1),Math.min(Z0,Z1),Math.max(X0,X1),Math.max(Z0,Z1)]);
   return m;
 }
-function boxFt(cx,cy,cz,w,h,d,mat,cast=true){ const m=new THREE.Mesh(unitBox,mat); m.scale.set(w,h,d); m.position.set(cx,cy,cz); m.castShadow=cast; m.receiveShadow=true; scene.add(m); return m; }
+function boxFt(cx,cy,cz,w,h,d,mat,cast=true){ const m=new THREE.Mesh(unitBox,mat); m.scale.set(w,h,d); m.position.set(cx,cy,cz); m.castShadow=cast; m.receiveShadow=true; PARENT.add(m); return m; }
 function floor(x0,y0,x1,y1,key,y=0.02){
   const w=fx(x1)-fx(x0), d=fz(y1)-fz(y0);
   const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),texMat(key,w,d));
@@ -238,7 +245,7 @@ wall(40,60,822,82,[[280,355,'door','b',1],[520,640,'window']]);                 
 wall(40,60,62,1080,[[170,290,'kw'],[530,650,'window'],[790,910,'window']]);            // left
 wall(800,60,822,1290,[[190,340,'window'],[480,530,'vent'],[625,675,'vent'],[750,860,'window'],[1120,1200,'vent']]); // right
 wall(40,1058,415,1080,[[315,410,'main','b',-1]]);                                       // front of hall
-wall(415,1265,822,1290,[[480,600,'window'],[710,775,'door','b',-1]]);                                           // front of stair hall
+wall(415,1265,822,1290,[[710,775,'door','b',-1]]);                                           // front of stair hall
 wall(360,82,385,465,[[380,445,'door','b',1]]);                                          // kitchen | bedroom 1
 wall(62,350,260,375);                                                                   // kitchen | hall (TV wall)
 wall(385,445,800,465,[[575,640,'door','a',1]]);                                       // bedroom 1 | toilet, door from the bedroom
@@ -330,7 +337,7 @@ const BR=fx(822), plotR=BR+2, plotRear=-14, plotFront=52, plotFL=plotR-53, plotR
 const CW=3.5, CT=0.6;
 function cwall(x0,z0,x1,z1){ boxFt((x0+x1)/2,CW/2,(z0+z1)/2,Math.abs(x1-x0)+CT,CW,Math.abs(z1-z0)+CT,M.compound); blockers.push([Math.min(x0,x1)-CT/2,Math.min(z0,z1)-CT/2,Math.max(x0,x1)+CT/2,Math.max(z0,z1)+CT/2]); }
 cwall(plotRL,plotRear,plotR,plotRear); cwall(plotR,plotRear,plotR,plotFront);
-cwall(fx(620)+0.3,plotFront,plotR,plotFront); cwall(plotFL,plotFront,fx(40)-0.3,plotFront);
+cwall(plotFL,plotFront,fx(40)-0.3,plotFront);
 { const dx=plotFL-plotRL, dz=plotFront-plotRear, len=Math.hypot(dx,dz);
   const m=boxFt((plotRL+plotFL)/2,CW/2,(plotRear+plotFront)/2,CT,CW,len,M.compound); m.rotation.y=Math.atan2(dx,dz);
   segBlockers.push([plotRL,plotRear,plotFL,plotFront,CT/2]); }
@@ -339,6 +346,117 @@ cwall(fx(620)+0.3,plotFront,plotR,plotFront); cwall(plotFL,plotFront,fx(40)-0.3,
   const l=new THREE.Mesh(new THREE.IcosahedronGeometry(3.2+(i%3)*0.7,1),M.leaf); l.position.set(x,h+1.5,z); l.castShadow=true; scene.add(l);
   blockers.push([x-0.6,z-0.6,x+0.6,z+0.6]);
 });
+
+/* ---------- Front elevation, roof & terrace: the reference design, mirrored so the tower sits over the staircase ---------- */
+const upper=new THREE.Group(); scene.add(upper);
+const glows=[], warm=[];
+M.charcoal=new THREE.MeshStandardMaterial({color:0x2E3338,roughness:0.75});
+M.white=new THREE.MeshStandardMaterial({color:0xF2F1EC,roughness:0.85});
+M.slot=new THREE.MeshStandardMaterial({color:0x8A5A35,emissive:0xFFB15C,emissiveIntensity:0,roughness:0.6});
+M.strip=new THREE.MeshStandardMaterial({color:0xD9D2C2,emissive:0xFFC27A,emissiveIntensity:0,roughness:0.6});
+M.down=new THREE.MeshStandardMaterial({color:0xEDEAE2,emissive:0xFFF1D6,emissiveIntensity:0.1});
+M.soil=new THREE.MeshStandardMaterial({color:0x4A3A2C,roughness:1});
+M.flower=new THREE.MeshStandardMaterial({color:0xC23A33,roughness:0.8,flatShading:true});
+const eveEmissive=[[M.slot,1,0],[M.strip,1,0],[M.down,1.1,0.1]];
+const slabMats=(key,w,d)=>[M.white,M.white,texMat(key,w,d),M.plaster,M.white,M.white];
+const capMats=[M.white,M.white,M.charcoal,M.white,M.white,M.white];
+const glowTex=(()=>{ const c=document.createElement('canvas'); c.width=64; c.height=128; const x=c.getContext('2d');
+  const g=x.createRadialGradient(32,32,0,32,32,32); g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(0.35,'rgba(255,255,255,.5)'); g.addColorStop(1,'rgba(255,255,255,0)');
+  x.setTransform(1,0,0,2,0,0); x.fillStyle=g; x.fillRect(0,0,64,64); return new THREE.CanvasTexture(c); })();
+function glowFt(x,y,z,w,h,parent=upper,o=0.8){
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:glowTex,color:0xFFBE73,transparent:true,opacity:o,blending:THREE.AdditiveBlending,depthWrite:false}));
+  m.position.set(x,y,z); m.renderOrder=3; parent.add(m); glows.push(m); return m;
+}
+const glow=(px,py,h,w,ht,parent,o)=>glowFt(fx(px),h,fz(py)+0.06,w,ht,parent,o);
+function warmLight(x,y,z,i,d,parent=scene){ const l=new THREE.PointLight(0xFFB870,0,d,2); l.position.set(x,y,z); l.userData.i=i; parent.add(l); warm.push(l); }
+M.motif=new THREE.MeshBasicMaterial({transparent:true,depthWrite:false,map:(()=>{ const c=document.createElement('canvas'); c.width=256; c.height=512; const x=c.getContext('2d');
+  x.strokeStyle='#fff'; x.lineWidth=10; x.lineCap='round'; x.lineJoin='round';
+  x.beginPath(); x.moveTo(128,500); x.bezierCurveTo(90,400,170,300,122,185); x.bezierCurveTo(100,125,140,62,152,22); x.stroke();
+  const leaf=(cx,cy,rx,ry,a)=>{ x.save(); x.translate(cx,cy); x.rotate(a); x.beginPath(); x.moveTo(-rx,0); x.quadraticCurveTo(0,-ry*2,rx,0); x.quadraticCurveTo(0,ry*2,-rx,0); x.stroke(); x.beginPath(); x.moveTo(-rx*0.75,0); x.lineTo(rx*0.75,0); x.stroke(); x.restore(); };
+  leaf(68,405,50,20,-0.6); leaf(186,340,55,22,0.5); leaf(70,262,45,18,-0.8); leaf(182,205,45,18,0.7); leaf(108,112,35,14,-1.0); leaf(176,70,30,12,0.9);
+  x.beginPath(); x.arc(84,330,26,0.2,4.6); x.stroke(); x.beginPath(); x.arc(168,436,22,3.3,7.6); x.stroke();
+  return new THREE.CanvasTexture(c); })()});
+
+PARENT=upper;
+// Roof slabs (terrace floor) and the portico projection
+box(34,54,828,1066,10,10.5,slabMats('kitchen',fx(828)-fx(34),fz(1066)-fz(54)));
+box(40,1060,415,1470,9.8,10.5,slabMats('kitchen',fx(415)-fx(40),fz(1470)-fz(1060)));
+box(690,1060,822,1290,10,10.5,M.white);
+// Terrace parapets
+[[40,60,822,78],[40,78,58,1405],[804,78,822,1060]].forEach(r=>box(...r,10.5,13.4,capMats));
+// Stair headroom tower, with a door onto the terrace
+box(415,1060,440,1085,10.5,20,M.white); box(415,1170,440,1290,10.5,20,M.white); box(415,1085,440,1170,17.5,20,M.white);
+box(800,1060,822,1290,10.5,20,M.white); box(415,1058,822,1080,10.5,20,M.white); box(415,1265,822,1290,10.5,20,M.white);
+box(405,1048,832,1302,20,20.8,M.white);
+box(730,1272,760,1300,20.8,22,M.white); box(780,1272,810,1300,20.8,22,M.white);
+// Pergola frame over the terrace, with dark fins
+box(25,1055,415,1090,19.6,20.8,M.white); box(25,1445,415,1480,19.6,20.8,M.white); box(25,1090,60,1445,19.6,20.8,M.white);
+for(let x=92;x<400;x+=62) box(x-7,1090,x+7,1445,19.1,21.5,M.charcoal);
+[110,230,350].forEach(x=>box(x-8,1455,x+8,1470,19.5,19.6,M.down));
+// Dark column at the outer corner
+box(40,1405,80,1460,0,20.8,M.charcoal,{block:true}); glow(60,1460,6,1.6,8,upper,0.55); glow(60,1460,16,1.6,7,upper,0.45);
+// Front of the terrace: projection edge, dark band, white band, railing
+box(30,1445,425,1478,9.6,10.6,M.white);
+box(40,1450,415,1472,10.6,11.8,M.charcoal);
+box(30,1446,425,1478,11.8,12.5,M.white);
+box(300,1450,415,1472,12.5,14.6,M.charcoal);
+for(let x=80;x<300;x+=70) box(x-3,1458,x+3,1464,12.5,14.6,M.charcoal);
+[13.2,13.9].forEach(h=>box(80,1459,300,1463,h,h+0.12,M.charcoal));
+box(80,1457,300,1465,14.5,14.65,M.charcoal);
+[[115,1425],[185,1425]].forEach(([x,y])=>{ const p=new THREE.Mesh(new THREE.CylinderGeometry(0.75,0.6,1.3,16),M.charcoal); p.position.set(fx(x),11.15,fz(y)); p.castShadow=true; upper.add(p);
+  const l=new THREE.Mesh(new THREE.IcosahedronGeometry(0.95,1),M.leaf); l.position.set(fx(x),12.3,fz(y)); l.castShadow=true; upper.add(l); });
+// Portico ceiling downlights
+[[130,1180],[260,1180],[130,1330],[260,1330],[360,1420]].forEach(([x,y])=>box(x-9,y-9,x+9,y+9,9.72,9.8,M.down,{cast:false}));
+// Room ceiling lights (seen when walking inside)
+[[250,700],[210,230],[590,260],[620,890]].forEach(([x,y])=>box(x-12,y-12,x+12,y+12,9.9,10,M.down,{cast:false}));
+// Tower front: dark strip with motif and light lines
+box(700,1290,710,1301,0,7,M.charcoal); box(775,1290,828,1301,0,7,M.charcoal); box(700,1290,828,1301,7,20.8,M.charcoal);
+[7.8,8.6,9.4,16.2,17.0,17.8].forEach(h=>box(712,1300,822,1302,h,h+0.08,M.strip,{cast:false}));
+{ const m=new THREE.Mesh(new THREE.PlaneGeometry(2.4,4.8),M.motif); m.position.set(fx(764),12.7,fz(1301)+0.04); m.renderOrder=2; upper.add(m); }
+glow(764,1301,10,2.4,3.2,upper,0.7); glow(764,1301,15.3,2.4,3,upper,0.7);
+// Marble block with three wood-lit slots, dark base below
+box(440,1290,700,1303,6.5,20.8,texMat('marble',fx(700)-fx(440),14.3));
+box(415,1290,700,1300,0,6.5,M.charcoal);
+[505,570,635].forEach(c=>{ box(c-17,1301,c+17,1305,9.2,17.8,M.charcoal); box(c-11,1303,c+11,1306,9.5,17.5,M.slot,{cast:false}); glow(c,1303.5,18.7,1.7,4.2,upper,0.75); });
+glow(470,1300,3.4,2.2,5,upper,0.35); glow(670,1300,3.4,2.2,5,upper,0.35);
+
+PARENT=scene;
+// Wood cladding and wall lights on the hall front, under the portico
+{ const w=texMat('wood',fx(415)-fx(195),9); box(195,1080,315,1088,0,9,w); box(315,1080,410,1088,7,9,w); }
+[180,302].forEach(x=>{ box(x-5,1088,x+5,1097,5.8,6.9,M.charcoal); glow(x,1097,8,1.3,2.4,scene,0.75); glow(x,1097,4.8,1.1,2.2,scene,0.6); });
+// Front compound: slatted car gate, white pillars, lit feature wall with a flower bed
+const zF=plotFront;
+[fx(40)-0.3,fx(415)+0.3,fx(620)+0.3,plotR].forEach(x=>{ boxFt(x,2.7,zF,1.3,5.4,1.3,M.white); blockers.push([x-0.65,zF-0.65,x+0.65,zF+0.65]); });
+{ const a=fx(40)+0.35, b=fx(415)-0.35, cx=(a+b)/2, w=b-a;
+  for(let h=0.5;h<5;h+=0.42) boxFt(cx,h,zF,w,0.24,0.12,M.charcoal);
+  [a+0.1,cx,b-0.1].forEach(x=>boxFt(x,2.55,zF,0.2,5.1,0.2,M.charcoal));
+  boxFt(cx,5.05,zF,w,0.15,0.2,M.charcoal); blockers.push([a,zF-0.3,b,zF+0.3]); }
+{ const a=fx(620)+0.95, b=plotR-0.65, cx=(a+b)/2, w=b-a;
+  boxFt(cx,2.3,zF,w,4.6,0.7,M.charcoal); boxFt(cx,4.66,zF,w+0.1,0.12,0.8,M.white);
+  [1.7,2.4,3.1].forEach(h=>boxFt(cx,h,zF+0.37,w-1.4,0.1,0.04,M.strip,false));
+  glowFt(cx,3.9,zF+0.42,w*0.9,1.6,scene,0.45);
+  blockers.push([a,zF-0.35,b,zF+0.35]);
+  boxFt(cx,0.35,zF+1.4,w,0.7,1.1,M.soil);
+  for(let i=0;i<34;i++){ const f=new THREE.Mesh(new THREE.IcosahedronGeometry(0.28+((i*7)%5)*0.05,0),i%3?M.flower:M.leaf); f.position.set(a+0.4+(i/33)*(w-0.8),0.85+((i*13)%4)*0.08,zF+1.1+((i*11)%5)*0.13); scene.add(f); } }
+// Evening lights
+warmLight(fx(200),9,fz(1200),1.1,18); warmLight(fx(330),9,fz(1390),1.0,16);
+warmLight(fx(220),19,fz(1300),0.8,20,upper);
+warmLight((fx(620)+plotR)/2,4,plotFront+3,0.9,14);
+[[250,700],[210,230],[590,260],[620,890]].forEach(([x,y])=>warmLight(fx(x),8.6,fz(y),0.9,20));
+function applyLight(){
+  const ev=$('evening').checked;
+  scene.background=new THREE.Color(ev?'#283350':(css('--scene')||'#DCE3E4'));
+  hemi.intensity=ev?0.5:0.78; hemi.color.set(ev?0x9DB0D6:0xffffff); hemi.groundColor.set(ev?0x2E2C28:0x9a917c);
+  sun.intensity=ev?0.1:0.62; sun.color.set(ev?0xA9BCE0:0xfff1dc);
+  warm.forEach(l=>l.intensity=ev?l.userData.i:0);
+  glows.forEach(g=>g.visible=ev);
+  eveEmissive.forEach(([m,on,off])=>m.emissiveIntensity=ev?on:off);
+  M.motif.color.set(ev?0xFFF2D6:0xD5CEBF);
+  window.__ground.material.color.set(ev?'#2C3328':(css('--ground')||'#7F8A6E'));
+}
+$('evening').addEventListener('change',applyLight);
+$('roof').addEventListener('change',e=>{ upper.visible=e.target.checked; });
+
 
 /* ---------- Room names ---------- */
 const ROOMS=[
@@ -384,7 +502,7 @@ function standAt(px,py,lx,ly){ walker.x=fx(px); walker.z=fz(py); const dx=fx(lx)
 function walkerPose(){ return {pos:new THREE.Vector3(walker.x,EYE,walker.z), q:new THREE.Quaternion().setFromEuler(new THREE.Euler(walker.pitch,walker.yaw,0,'YXZ'))}; }
 
 /* ---------- Camera flights ---------- */
-const HOME={pos:new THREE.Vector3(-34,62,72), target:new THREE.Vector3(12,0,22)};
+const HOME={pos:new THREE.Vector3(-4,13,86), target:new THREE.Vector3(12,10,38)};
 let mode='orbit', tween=null, savedOrbit=null;
 function flyTo(pos,q,fov,done){ tween={t:0,dur:reduceMotion?0.001:1.2,p0:camera.position.clone(),q0:camera.quaternion.clone(),f0:camera.fov,p1:pos,q1:q,f1:fov,done}; }
 function stepTween(dt){
@@ -409,7 +527,7 @@ function goOrbit(){
 
 /* ---------- Guided tour ---------- */
 const TOUR=[ // [pos px, look-at px]
-  [[330,1720],[340,1100]],[[340,1250],[362,1000]],[[362,1110],[362,800]],[[362,1000],[110,580]],
+  [[430,2080],[430,1200]],[[520,1700],[360,1080]],[[340,1250],[362,1000]],[[362,1110],[362,800]],[[362,1000],[110,580]],
   [[320,700],[160,390]],[[310,430],[180,200]],[[300,330],[90,200]],[[320,412],[620,412]],
   [[470,412],[700,260]],[[560,300],[790,270]],[[470,412],[300,412]],[[320,440],[480,700]],
   [[482,640],[482,950]],[[482,780],[680,900]],[[580,900],[790,950]]
@@ -433,7 +551,7 @@ function stepTour(dt){
 }
 
 /* ---------- Input ---------- */
-const keys=new Set(); let padF=false,padB=false;
+const keys=new Set(); let padF=false,padB=false,padL=false,padR=false;
 addEventListener('keydown',e=>{
   if(/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
   if(e.key==='Escape'&&mode!=='orbit'){ goOrbit(); return; }
@@ -441,7 +559,7 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>keys.delete(e.code)); addEventListener('blur',()=>keys.clear());
 const hold=(el,set)=>{ el.addEventListener('pointerdown',e=>{e.preventDefault();set(true);el.setPointerCapture(e.pointerId);}); ['pointerup','pointercancel','lostpointercapture'].forEach(t=>el.addEventListener(t,()=>set(false))); };
-hold($('padF'),v=>padF=v); hold($('padB'),v=>padB=v);
+hold($('padF'),v=>padF=v); hold($('padB'),v=>padB=v); hold($('padL'),v=>padL=v); hold($('padR'),v=>padR=v);
 let look=null; const cv=renderer.domElement;
 cv.addEventListener('pointerdown',e=>{ if(mode!=='walk'||tween) return; look={x:e.clientX,y:e.clientY}; cv.setPointerCapture(e.pointerId); });
 cv.addEventListener('pointermove',e=>{ if(!look) return; const k=e.pointerType==='touch'?0.006:0.004; walker.yaw-=(e.clientX-look.x)*k; walker.pitch=Math.max(-1.2,Math.min(1.2,walker.pitch-(e.clientY-look.y)*k)); look={x:e.clientX,y:e.clientY}; });
@@ -450,7 +568,7 @@ function stepWalk(dt){
   let f=0,s=0;
   if(keys.has('KeyW')||keys.has('ArrowUp')||padF) f++; if(keys.has('KeyS')||keys.has('ArrowDown')||padB) f--;
   if(keys.has('KeyA')) s--; if(keys.has('KeyD')) s++;
-  if(keys.has('ArrowLeft')) walker.yaw+=1.9*dt; if(keys.has('ArrowRight')) walker.yaw-=1.9*dt;
+  if(keys.has('ArrowLeft')||padL) walker.yaw+=1.9*dt; if(keys.has('ArrowRight')||padR) walker.yaw-=1.9*dt;
   let sp=(keys.has('ShiftLeft')||keys.has('ShiftRight')?13:6.5)*dt; if(f&&s) sp*=0.7071;
   const y=walker.yaw, dx=(-Math.sin(y)*f+Math.cos(y)*s)*sp, dz=(-Math.cos(y)*f-Math.sin(y)*s)*sp;
   if(dx&&isFree(walker.x+dx,walker.z)) walker.x+=dx; if(dz&&isFree(walker.x,walker.z+dz)) walker.z+=dz;
@@ -488,7 +606,7 @@ mapC.addEventListener('click',e=>{
 });
 
 /* ---------- Theme, size, loop ---------- */
-function applyTheme(){ scene.background=new THREE.Color(css('--scene')||'#DCE3E4'); window.__ground.material.color.set(css('--ground')||'#7F8A6E'); }
+function applyTheme(){ applyLight(); }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);
 new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 function resize(){ renderer.setSize(innerWidth,innerHeight); camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); sizeMap(); }
